@@ -1,9 +1,11 @@
 import requests
+from bs4 import BeautifulSoup
 from PIL import Image
 from .descramble import descramble
 
 
 def get_all_images(series_name: str, vol_num: int):
+    pages = get_num_pages(series_name, vol_num)
     image_list = []
     base_url = "https://comic-meteor.jp/ptdata/" + series_name + "/"
     not_found = False
@@ -25,3 +27,11 @@ def get_all_images(series_name: str, vol_num: int):
             not_found = True
 
     return image_list
+
+
+def get_num_pages(series_name: str, vol_num: int):
+    url = "https://comic-meteor.jp/ptdata/" + series_name + "/" + f"{vol_num:04d}"
+    page_request = requests.get(url)
+    soup = BeautifulSoup(page_request.text, features="html.parser")
+    content_div = soup.find("div", {"id": "content"})
+    return len(content_div.findChildren())
