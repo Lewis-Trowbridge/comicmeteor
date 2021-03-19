@@ -1,5 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
+from concurrent.futures import ThreadPoolExecutor, wait
 from PIL import Image
 from .descramble import descramble
 
@@ -7,26 +8,31 @@ from .descramble import descramble
 def get_all_images(series_name: str, vol_num: int):
     pages = get_num_pages(series_name, vol_num)
     image_list = []
-    base_url = "https://comic-meteor.jp/ptdata/" + series_name + "/"
-    not_found = False
-    current_count = 1
+    base_url = "https://comic-meteor.jp/ptdata/" + series_name + "/" + f"{vol_num:04d}" + "/data/"
+    image_futures = []
 
-    while not not_found:
-        vol_num_string = str.format(f"{vol_num:04d}")
-        current_count_string = str.format(f"{current_count:04d}")
-        num_base_url = base_url + vol_num_string + "/data/"
-        json_request = requests.get(num_base_url + current_count_string + ".ptimg.json")
-        if json_request.status_code != 404:
-            json_dict = json_request.json()
-            image_url = num_base_url + json_dict["resources"]["i"]["src"]
-            image_request = requests.get(image_url, stream=True)
-            scrambled_image = Image.open(image_request.raw)
-            image_list.append(descramble(scrambled_image, json_dict))
-            current_count += 1
-        else:
-            not_found = True
+    with ThreadPoolExecutor() as pool:
+
+        for page_num in range(1, pages + 1):
+
+            image_futures.append(pool.submit(get_image, base_url, page_num))
+
+    wait(image_futures)
+    for image_future in image_futures:
+        image_list.append(image_future.result())
 
     return image_list
+
+
+def get_image(base_url: str, page_num: int):
+    page_num_string = str.format(f"{page_num:04d}")
+    json_request = requests.get(base_url + page_num_string + ".ptimg.json")
+    if json_request.status_code != 404:
+        json_dict = json_request.json()
+        image_url = base_url + json_dict["resources"]["i"]["src"]
+        image_request = requests.get(image_url, stream=True)
+        scrambled_image = Image.open(image_request.raw)
+        return descramble(scrambled_image, json_dict)
 
 
 def get_num_pages(series_name: str, vol_num: int):
